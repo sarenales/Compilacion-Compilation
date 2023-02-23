@@ -1,0 +1,43 @@
+package main 
+var (	a, b, c int
+  	d, e float32 )
+
+func procesar(x int, y int) { // es un procedimiento, no devuelve valor
+  var aux, vueltas, resultado int
+	/** la siguiente es una funcion anonima y anidada; el operador := va 
+	**  con un identificador a la izquierda. Ojo: No es una asignacion
+	/**  normal  */
+  masuno := func(x int) int {
+		return x + 1
+	} // fin de la función anónima
+  menosuno := func(x int) int {
+		return x - 1
+	} // fin de la función anónima
+  aux = y resultado = x
+  if resultado < 1000 {
+		vueltas = 0
+		for aux == 0 {
+			resultado = masuno(resultado) /* Llamada a la funcion
+			 anónima */
+			break resultado > 100000
+			aux = menosuno(aux)		/* Llamada a la funcion
+			 anónima */
+			vueltas = vueltas + 1
+		} // fin /for 
+		println(resultado)
+	} // fin /if 
+	println(vueltas)
+} // fin func procesar 
+
+func main () {
+	/*** esto es un comentario ** / *
+	    multilínea ***/
+
+  read(a) read(b)
+  d = 1/b
+  procesar(a,b) /* llamada a un procedimiento */
+  c = c*(c*d)+e
+  println(c)
+} // fin func main 
+
+
