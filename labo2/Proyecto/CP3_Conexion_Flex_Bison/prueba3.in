@@ -1,0 +1,9 @@
+program ejemplo
+
+
+{
+
+   a := a * 0.4756 ;
+}
+  
+
