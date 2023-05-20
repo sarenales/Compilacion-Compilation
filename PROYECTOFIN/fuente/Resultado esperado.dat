@@ -1,0 +1,72 @@
+./parser < pruebas/prueba1.in
+ha comenzado...
+1: prog ;
+2: a:=0 ;
+3: __t1:=a+3 ;
+4: __t2:=b-3 ;
+5: if __t1<__t2 goto 7 ;
+6: goto 12 ;
+7: if a>20 goto 12 ;
+8: goto 9 ;
+9: __t3:=a+1 ;
+10: a:=__t3 ;
+11: goto 3 ;
+12: halt ;
+ha finalizado bien...
+
+PROBANDO: ./parser < pruebas/prueba2.in
+./parser < pruebas/prueba2.in
+ha comenzado...
+1: prog ;
+2: __t1:=6*6 ;
+3: __t2:=b+__t1 ;
+4: __t3:=__t2-4 ;
+5: a:=__t3 ;
+6: __t4:=a/2 ;
+7: b:=__t4 ;
+8: __t5:=a+3 ;
+9: __t6:=b*6 ;
+10: if __t5<__t6 goto 12 ;
+11: goto 18 ;
+12: __t7:=a*2 ;
+13: a:=__t7 ;
+14: goto 18 ;
+15: __t8:=b+1 ;
+16: b:=__t8 ;
+17: goto 8 ;
+18: a:=b ;
+19: halt ;
+ha finalizado bien...
+
+PROBANDO: ./parser < pruebas/prueba3.in
+./parser < pruebas/prueba3.in
+ha comenzado...
+1: prog ;
+2: __t1:=6*2 ;
+3: __t2:=__t1-4 ;
+4: k:=__t2 ;
+5: s2:=0 ;
+6: if s2>=0 goto 8 ;
+7: goto 26 ;
+8: __t3:=k-1 ;
+9: __t4:=s2*7 ;
+10: if __t3>__t4 goto 12 ;
+11: goto 18 ;
+12: k:=s2 ;
+13: if k<1 goto 26 ;
+14: goto 15 ;
+15: __t5:=s2+1 ;
+16: s2:=__t5 ;
+17: goto 23 ;
+18: s2:=0 ;
+19: __t6:=k*3 ;
+20: k:=__t6 ;
+21: if k>20 goto 26 ;
+22: goto 23 ;
+23: __t7:=k-1 ;
+24: k:=__t7 ;
+25: goto 6 ;
+26: s3:=s2 ;
+27: halt ;
+ha finalizado bien...
+

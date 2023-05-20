@@ -1,0 +1,15 @@
+program prueba2 is
+
+var a,b : integer ;
+
+begin
+  a := b + 6 * 6 - 4;
+  b:= a / 2;
+  while (a+3 < b*6) do
+    a := a * 2;
+    exit;
+    b := b + 1;
+  endwhile ;
+  a:=b;
+
+endprogram ;

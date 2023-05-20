@@ -1,0 +1,16 @@
+program prueba1 is
+
+var a,b : integer ;
+
+begin
+
+  a:= 0;
+  while (a+3 < b-3) do
+    
+    exit if a > 20;
+    a := a + 1;
+   
+  endwhile ;
+ 
+
+endprogram ;

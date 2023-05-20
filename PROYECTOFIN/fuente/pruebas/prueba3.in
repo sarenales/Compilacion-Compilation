@@ -1,0 +1,23 @@
+program prueba3 is
+var k : float ;
+var s2,s3 : integer ;
+
+begin
+
+  k := 6 * 2 - 4;
+  s2 := 0;
+  while s2 >= 0 do
+  	if (k-1>s2*7) then 
+                k:= s2;
+    		exit if k<1;
+    		s2 := s2 + 1;
+        else 
+       		s2 := 0; 
+       		k:= k*3;
+                exit if k>20;
+  	endif ;
+	k := k - 1;
+  endwhile;
+  s3 := s2;
+  
+endprogram ;
