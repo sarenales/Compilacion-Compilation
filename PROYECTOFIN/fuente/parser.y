@@ -44,13 +44,15 @@
 
 
 /* declaración de tokens. Esto debe coincidir con tokens.l */
+%token <str> TASSIG TASSIG2 TCOMMA TSEMIC
+%token <str> CTE_INT CTE_FLOAT32 CTE_ID
 %token <str> TIDENTIFIER TINT TREAL
 %token <str> TCEQ TNEQ TCNE TCLT TCLE TCGT TCGE
 %token <str> TOPEN TCLOSE TLFLE TRFLE
 %token <str> TPLUS TMINUS TMUL TDIV
-%token <str> TASSIG TASSIG2 TCOMMA TSEMIC
+
 %token <str> RAND ROR RNOT
-%token <str> RPACKAGE RMAIN RFUNC RVAR RINTEGER RFLOAT RIF RFOR RBREAK RCONTINUE RREAD RPRINTLN RRETURN RELSE RTHEN RENDIF RELSEIF
+%token <str> RPACKAGE RMAIN RFUNC RVAR RIF RFOR RBREAK RCONTINUE RREAD RPRINTLN RRETURN RELSE RTHEN RENDIF RELSEIF RFLOAT32 RINTEGER
 
 // declaracion no terminal de la gramática
 %type <str> programa
@@ -88,47 +90,69 @@
 
 %%
 
-programa : RPACKAGE
+programa : RPACKAGE RMAIN
         {
-               TablaSimbolos st;
-               stPila.empilar(st);
-               st.anadirVariable(*$1, "programa");
-               codigo.anadirInstruccion("goto 5");
-               codigo.anadirInstruccion("Error en division entre 0;");
-               codigo.anadirInstruccion("writeln");
-               codigo.anadirInstruccion("goto");
-               codigo.anadirInstruccion("package");
+               codigo.anadirInstruccion("package main");
         }
-        RMAIN bloque_ppl
+         bloque_ppl
         {
-                vector<int> v;
-                v.push_back(4);
-                codigo.completarInstrucciones(v, codigo.obtenRef());
-                
-                if(!errores) {
-                    codigo.anadirInstruccion("halt");                       
-                    codigo.escribir();
-                }
-                stPila.desempilar(); 
-                
+               codigo.escribir();
         }
         ;
 
-bloque_ppl : decl_bl subprogs;
-
-subprogs : subprogs subprograma
-         | subprograma
-   ;
-
-subprograma : RFUNC nombre argumentos tipo_opc bloque
+bloque_ppl : decl_bl 
+            {
+                codigo.anadirInstruccion("goto");
+            }    
+            subprogs
+            {
+               vector<int> v({$2});
+               codigo.completarInstrucciones(v, $4->at(0)); 
+               delete $4;
+            }
             ;
 
-nombre : RMAIN
-       | TIDENTIFIER
+subprogs : subprogs subprograma
+            {
+               $$ = &unir(*$1,*$2);
+               delete $2;
+            }
+
+         | subprograma
+            {
+               $$ = $1;
+            }
+   ;
+
+subprograma : RFUNC nombre M
+               {
+                   if($2->compare("main")) codigo.anadirInstruccion("proc "+ (*$2));
+               }
+               argumentos tipo_opc bloque
+               {
+                   if($2->compare("main") == 0){
+                         $$ = new vector<int>({$3});
+                         codigo.anadirInstruccion("halt");
+                         delete $2;
+                     } else {
+                         codigo.anadirInstruccion("endproc "+ (*$2));
+                         $$ = new vector<int>();
+                     }
+                     delete $7;
+               }
+            ;
+
+nombre : RMAIN {    
+                  $$ = new string("main");
+               }
+       | CTE_ID {
+                  $$ = $1;
+                  }
        ;
 
 bloque : TLFLE decl_bl subprogs_anon lista_de_sentencias TRFLE
         {
+            $$ = $4;
             $$ = new sentenciastruct;
             $$->breaks = * new vector<int>();
             $$->continues = * new vector<int>();
@@ -136,15 +160,23 @@ bloque : TLFLE decl_bl subprogs_anon lista_de_sentencias TRFLE
        ;
 
 subprogs_anon : subprogs_anon subprograma_anon
-      | /* Vacío*/
+      | %empty
       ;
 
-subprograma_anon : TIDENTIFIER TASSIG RFUNC argumentos tipo_opc bloque     
+subprograma_anon : CTE_ID TASSIG RFUNC 
+                  {
+                     codigo.añadirInstruccion("proc" + *$1);
+                  }
+                  argumentos tipo_opc bloque     
+                  {
+                     codigo.añadirInstruccion("endproc" + *$1);
+                     delete $7;
+                  }
       ;
 
 decl_bl : RVAR TOPEN lista_decl TCLOSE decl_bl
         | RVAR declaracion decl_bl
-        | /* Vacío*/
+        | %empty
         ;
 
 lista_decl : lista_decl declaracion
@@ -152,54 +184,26 @@ lista_decl : lista_decl declaracion
            ;
 
 declaracion : lista_de_ident tipo
-                {
-                     for(vector<string>::iterator i = $1->begin(); i != $1->end(); i++){
-                        if (!stPila.tope().existeId(*i)){
-                           stPila.tope().anadirVariable(*i, *$2);
-                        }else{
-                           yyerror("Id duplicado.");
-                           errores=true;
-                        }
-                     }                
+                {          
                     codigo.anadirDeclaraciones(*$1, *$2);
+                    delete $1;
                 }
             ;
 
-lista_de_ident : TIDENTIFIER resto_lista_id
+lista_de_ident : CTE_ID resto_lista_id
                 {
-                   procedimiento= *$1;
-                   if (!stPila.tope().existeId(*$1)){
-                             stPila.tope().anadirSubprograma(*$1);
-                   }else{
-                      yyerror("Id duplicado.");
-                      errores=true;
-                   }
-                   TablaSimbolos st; 
-                   stPila.empilar(st);
-                   codigo.anadirInstruccion("proc " + *$1); 
-                   
-                  $$ = new vector<string>();
-                  $$->push_back(*$1);
+                     $$ = new vector<string>;
+                     $$->insert($$->begin(), *$1);
+                     $$ = $2; 
                 }
                ;
 
-resto_lista_id : TCOMMA TIDENTIFIER resto_lista_id
+resto_lista_id : TCOMMA CTE_ID resto_lista_id
                 {
-                   procedimiento= *$2;
-                   if (!stPila.tope().existeId(*$2)){
-                             stPila.tope().anadirSubprograma(*$2);
-                   }else{
-                      yyerror("Id duplicado.");
-                      errores=true;
-                   }
-                   TablaSimbolos st; 
-                   stPila.empilar(st);
-                   codigo.anadirInstruccion("proc " + *$2); 
-                   
-                  $$ = new vector<string>();
-                  $$->push_back(*$2);
+                     $3->insert($3->begin(), *$2); 
+                     $$ = $3;
                 }
-               | /* Vacío */
+               | %empty
                 {
                   $$ = new vector<string>();
                 };
@@ -209,14 +213,18 @@ tipo : RINTEGER
                {  
                   $$ = new std::string("int");
                }
-     | RFLOAT 
+     | RFLOAT32 
                {
-                  $$ = new std::string("real");
+                  $$ = new std::string("float32");
                }
      ;
 
 tipo_opc: tipo 
-        | /* Vacío*/
+            {
+                  $$ = $1;
+            }
+        | %empty
+            {}
         ;
 
 argumentos : TOPEN lista_de_param TCLOSE
@@ -224,29 +232,26 @@ argumentos : TOPEN lista_de_param TCLOSE
 
 lista_de_param : lista_de_ident tipo
              {  
-                for(vector<string>::iterator i = $1->begin(); i != $1->end(); i++){
-                   if (!stPila.tope().existeId(*i)){
-                      stPila.anadirParametro(procedimiento,*i, *$2);
-                   }else{
-                       yyerror("Id duplicado.");
-                       errores=true;
-                    }
-                }
-
                 codigo.anadirParametros(*$1, *$2);
+                delete $1;
               }
                 resto_lis_de_param
-               | /* Vacío */
+               | %empty
                ;
 
 resto_lis_de_param : TCOMMA lista_de_ident tipo
+             {  
+                codigo.anadirParametros(*$2, *$3);
+                delete $2;
+              }
                    resto_lis_de_param
-                   | /*Vacío*/
+                   | %empty
                    ;
 
 lista_de_sentencias : lista_de_sentencias sentencia
                      {
                         $$ = new sentenciastruct;
+                        $$ = $1;
                         $$->breaks= *unir($1->breaks, $2->breaks);
                         $$->continues= *unir($1->continues, $2->continues);
                         delete $1;
@@ -280,29 +285,32 @@ elseif_else_sentencia: RELSEIF expresion RTHEN M bloque N M elseif_else_sentenci
                         $$->breaks = * new vector<int>;
                         $$->continues = * new vector<int>;
                     }
-                | /*Vacio*/
+                | %empty
 
-sentencia: variable TASSIG2 TIDENTIFIER TOPEN lista_expr TCLOSE
-        {
-         $$ = new sentenciastruct;
-         $$->breaks = * new vector<int>;
-         $$->continues = * new vector<int>;
-        }
-
-         | variable TASSIG2 expresion
-            {
-               $$= new sentenciastruct;
-               $$->breaks = * new vector<int>;
-               $$->continues = * new vector<int>;
-               delete $1 ; delete $3;
-            }
-
-         | TIDENTIFIER TOPEN lista_expr TCLOSE
-                {
+sentencia: variable TASSIG2 CTE_ID TOPEN lista_expr TCLOSE
+              {
+                  codigo.añadirInstruccion($1->str+":= call"+$3->str);
                   $$ = new sentenciastruct;
                   $$->breaks = * new vector<int>;
                   $$->continues = * new vector<int>;
+              }
+
+         | variable TASSIG2 expresion
+               {
+                  codigo.añadirInstruccion($1->str+":="+$3->str);                
+                  $$= new sentenciastruct;
+                  $$->breaks = * new vector<int>;
+                  $$->continues = * new vector<int>;
+                  delete $1 ; delete $3;
                }
+
+         | CTE_ID TOPEN lista_expr TCLOSE
+                {
+                  codigo.añadirInstruccion("call"+$1->str);
+                  $$ = new sentenciastruct;
+                  $$->breaks = * new vector<int>;
+                  $$->continues = * new vector<int>;
+                }
 
          | RIF expresion M bloque M
             {
@@ -399,7 +407,7 @@ sentencia: variable TASSIG2 TIDENTIFIER TOPEN lista_expr TCLOSE
                $$->breaks = * new vector<int>;
                $$->continues = * new vector<int>;
          }
-         | RFOR TOPEN tipo TIDENTIFIER 
+         | RFOR TOPEN tipo CTE_ID 
          {
              codigo.anadirInstruccion(*$3 + " " + *$4);
          }
@@ -442,18 +450,30 @@ sentencia: variable TASSIG2 TIDENTIFIER TOPEN lista_expr TCLOSE
 
          ;
 
-variable: TIDENTIFIER
+variable: CTE_ID
         {
-            $$ =  $1;                
+            $$->str =  $1->str;                
         }
         ;
 
 lista_expr: expresion resto_lista_expr
-          | /* Vacío */ 
+            {
+                $$->str = añadirDeclaraciones($2*->str,$1->str);
+            }
+          | %empty
+          {
+              $$->str = * new vector<String>;
+          }
           ;
 
 resto_lista_expr : TCOMMA expresion resto_lista_expr
-                  | /* Vacío */
+            {  
+                $$->str = añadirDeclaraciones($3*->str,$2*->str);
+            }
+                  | %empty
+             {
+                 $$->str = * new vector<String>;
+             }
                  ;
 
 expresion: expresion TPLUS expresion
@@ -466,6 +486,8 @@ expresion: expresion TPLUS expresion
                   yyerror("Tipos incompatibles");
                   errores=true;
                }
+               $$ = nuevo_id();
+               codigo.anadirInstruccion($$->str+":="+$1->str+"+"+$3->str);
                $$= new expresionstruct;
                $$->trues = * new vector<int>();
                $$->falses = * new vector<int>();
@@ -485,6 +507,8 @@ expresion: expresion TPLUS expresion
                   yyerror("Tipos incompatibles");
                   errores=true;
                }
+               $$ = nuevo_id();
+               codigo.anadirInstruccion($$->str+":="+$1->str+"-"+$3->str);
                $$= new expresionstruct;
                $$->trues = * new vector<int>();
                $$->falses = * new vector<int>();
@@ -502,6 +526,8 @@ expresion: expresion TPLUS expresion
                   yyerror("Tipos incompatibles");
                   errores=true;
                }
+               $$ = nuevo_id();
+               codigo.anadirInstruccion($$->str+":="+$1->str+"*"+$3->str);
                $$= new expresionstruct;
                $$->trues = * new vector<int>();
                $$->falses = * new vector<int>();
@@ -520,6 +546,8 @@ expresion: expresion TPLUS expresion
                   yyerror("Tipos incompatibles");
                   errores=true;
                }
+               $$ = nuevo_id();
+               codigo.anadirInstruccion($$->str+":="+$1->str+"/"+$3->str);
                codigo.anadirInstruccion("if"+$3->str+"=0 goto 2");
                $$= new expresionstruct;
                $$->trues = * new vector<int>();
@@ -539,10 +567,13 @@ expresion: expresion TPLUS expresion
                   yyerror("Tipos incompatibles");
                   errores=true;
                }
+               
                $$= new expresionstruct;               
                $$->str= "";
                $$->trues = * new vector<int>(codigo.obtenRef());
                $$->falses = * new vector<int>(codigo.obtenRef()+1);
+               codigo.anadirInstruccion("if"+$1->str+"<"+$3->str);
+               codigo.anadirInstruccion("goto");
                *$$ = makecomparison($1->str,*$2,$3->str);
                $$->tipo = "comparacion";
             }
@@ -562,6 +593,8 @@ expresion: expresion TPLUS expresion
                $$->str= "";
                $$->trues = * new vector<int>(codigo.obtenRef());
                $$->falses = * new vector<int>(codigo.obtenRef()+1);
+               codigo.anadirInstruccion("if"+$1->str+">"+$3->str);
+               codigo.anadirInstruccion("goto");
                *$$ = makecomparison($1->str,*$2,$3->str);
                $$->tipo = "comparacion";
             }
@@ -581,6 +614,8 @@ expresion: expresion TPLUS expresion
                $$->str= "";
                $$->trues = * new vector<int>(codigo.obtenRef());
                $$->falses = * new vector<int>(codigo.obtenRef()+1);
+               codigo.anadirInstruccion("if"+$1->str+"<="+$3->str);
+               codigo.anadirInstruccion("goto");
                *$$ = makecomparison($1->str,*$2,$3->str);
                $$->tipo = "comparacion";
             }
@@ -600,6 +635,8 @@ expresion: expresion TPLUS expresion
             $$->str= "";
             $$->trues = * new vector<int>(codigo.obtenRef());
             $$->falses = * new vector<int>(codigo.obtenRef()+1);
+            codigo.anadirInstruccion("if"+$1->str+">="+$3->str);
+            codigo.anadirInstruccion("goto");
             *$$ = makecomparison($1->str,*$2,$3->str);
             $$->tipo = "comparacion";
          }
@@ -618,6 +655,8 @@ expresion: expresion TPLUS expresion
                $$->str= "";
                $$->trues = * new vector<int>(codigo.obtenRef());
                $$->falses = * new vector<int>(codigo.obtenRef()+1);
+               codigo.añadirInstruccion("if"+$1->str+"=="+$2->str);
+               codigo.añadirInstruccion("goto");
                *$$ = makecomparison($1->str,*$2,$3->str);
                $$->tipo = "comparacion";
             }
@@ -637,6 +676,8 @@ expresion: expresion TPLUS expresion
                $$->str= "";
                $$->trues = * new vector<int>(codigo.obtenRef());
                $$->falses = * new vector<int>(codigo.obtenRef()+1);
+               codigo.añadirInstruccion("if"+$1->str+"!="+$2->str);
+               codigo.añadirInstruccion("goto");
                *$$ = makecomparison($1->str,*$2,$3->str);
                $$->tipo = "comparacion";
                
@@ -651,20 +692,20 @@ expresion: expresion TPLUS expresion
                 $$->str = *$1;
                 $$->tipo = "variable";
         }
-         | TINT
+         | CTE_INT
         {
                 $$ = new expresionstruct;
                 $$->trues = * new vector<int>();
                 $$->falses = * new vector<int>();
-                $$->str = *$1;
+                $$->str = *$1->str;
                 $$->tipo = "numero";
         }
-         | TREAL
+         | CTE_FLOAT32
         {
                 $$ = new expresionstruct;
                 $$->trues = * new vector<int>();
                 $$->falses = * new vector<int>();
-                $$->str = *$1;
+                $$->str = *$1->str;
                 $$->tipo = "numero";                
         }
          | TOPEN expresion TCLOSE
@@ -678,14 +719,6 @@ expresion: expresion TPLUS expresion
         
          | expresion RAND M expresion 
         {
-             if ($1->tipo== "bool" || $1->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles AND ");
-                  errores=true;
-               }
-               if ($4->tipo== "bool" || $4->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles AND");
-                  errores=true;
-               }
                $$= new expresionstruct;
                codigo.completarInstrucciones($1->trues, $3);
                $$->trues = $4->trues;
@@ -696,14 +729,6 @@ expresion: expresion TPLUS expresion
         
          | expresion ROR M expresion
         {
-             if ($1->tipo== "bool" || $1->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles OR");
-                  errores=true;
-               }
-               if ($4->tipo== "bool" || $4->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles OR");
-                  errores=true;
-               }
                $$= new expresionstruct;
                codigo.completarInstrucciones($1->falses, $3);
                $$->trues = *unir($1->trues, $4->trues);
@@ -714,28 +739,20 @@ expresion: expresion TPLUS expresion
         
          | RNOT expresion
         {
-             if ($2->tipo!= "comparacion" && $2->tipo!="bool" ){
-                  yyerror("Tipos incompatibles NOT");
-                  errores=true;
-               }
               $$= new expresionstruct;
               $$->trues = $2->falses;
-              $$->falses = $2->trues;
               $$->str = "";
               $$->tipo = "bool";
         }       
     ;
 
-M: /* empty */
+M: %empty
         {$$ = codigo.obtenRef();}
 ;
 
 
-N: /* empty */
+N: %empty
         {$$ = new vector<int>();
-        vector<int> tmp1;
-        tmp1.push_back(codigo.obtenRef());
-        *$$ = tmp1;
         codigo.anadirInstruccion("goto");
         };
 %%
