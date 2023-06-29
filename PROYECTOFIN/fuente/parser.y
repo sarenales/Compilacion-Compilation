@@ -16,71 +16,53 @@
     }
    #include "Codigo.hpp"
    #include "Exp.hpp"
-   #include "PilaTablaSimbolos.hpp"
-   #include "TablaSimbolos.hpp"
+
 
    // funciones a utilizar
    expresionstruct makecomparison(std::string &s1, std::string &s2, std::string &s3) ;
    expresionstruct makearithmetic(std::string &s1, std::string &s2, std::string &s3) ;
-   vector<int> *unir(vector<int>& lis1, vector<int>& lis2);
+   vector<int> &unir(vector<int>& lis1, vector<int>& lis2);
 
    Codigo codigo;
    string procedimiento;
-   bool errores = false;
-   PilaTablaSimbolos stPila;
+
 %}
 
 /* 
    qué atributos tienen los símbolos 
 */
 %union {
-   int number;
-   string *str;
-   vector<string> *lid;
-   vector<int> *numlist;
-   expresionstruct *expr;
-   sentenciastruct *sen;
+    string *str ; 
+    vector<int> *numlist;
+    vector<string> *list ;
+    sentenciastruct* jumps;
+    expresionstruct *expr ;
+    int number ;
 }
 
 
 /* declaración de tokens. Esto debe coincidir con tokens.l */
 %token <str> TASSIG TASSIG2 TCOMMA TSEMIC
-%token <str> CTE_INT CTE_FLOAT32 CTE_ID
-%token <str> TIDENTIFIER TINT TREAL
+%token <str> RPACKAGE RMAIN CTE_INT CTE_FLOAT32 CTE_ID
 %token <str> TCEQ TNEQ TCNE TCLT TCLE TCGT TCGE
 %token <str> TOPEN TCLOSE TLFLE TRFLE
 %token <str> TPLUS TMINUS TMUL TDIV
 
 %token <str> RAND ROR RNOT
-%token <str> RPACKAGE RMAIN RFUNC RVAR RIF RFOR RBREAK RCONTINUE RREAD RPRINTLN RRETURN RELSE RTHEN RENDIF RELSEIF RFLOAT32 RINTEGER
+%token <str> RFUNC RVAR RIF RFOR RBREAK RCONTINUE RREAD RPRINTLN RRETURN RELSE RTHEN RENDIF RELSEIF RFLOAT32 RINTEGER RFROM RTO RDO RENDFOR
 
 // declaracion no terminal de la gramática
-%type <str> programa
-%type <sen> bloque_ppl
-%type <sen> bloque
-%type <str> decl_bl
-%type <str> lista_decl
-%type <str> declaracion
-%type <lid> lista_de_ident
-%type <lid> resto_lista_id
-%type <str> tipo
-%type <str> argumentos
-%type <str> lista_de_param
-%type <str> resto_lis_de_param
-%type <sen> lista_de_sentencias
-%type <sen> elseif_else_sentencia
-%type <sen> sentencia
-%type <str> variable
-%type <str> lista_expr
-%type <str> resto_lista_expr
+%type <str> nombre tipo tipo_opc variable
+%type <numlist> subprogs subprograma
+%type <list> lista_de_ident resto_lista_id lista_expr resto_lista_expr
+%type <jumps> bloque lista_de_sentencias sentencia
 %type <expr> expresion
 %type <number> M
-%type <numlist> N 
 
 // prioridades
 %left ROR
 %left RAND
-%left RNOT
+%nonassoc RNOT
 %nonassoc TCEQ TCNE TCLT TCLE TCGT TCGE TNEQ
 %left TPLUS TMINUS
 %left TMUL TDIV
@@ -92,7 +74,7 @@
 
 programa : RPACKAGE RMAIN
         {
-               codigo.anadirInstruccion("package main");
+               codigo.anadirInstruccion("proc main");
         }
          bloque_ppl
         {
@@ -100,7 +82,7 @@ programa : RPACKAGE RMAIN
         }
         ;
 
-bloque_ppl : decl_bl 
+bloque_ppl : decl_bl M
             {
                 codigo.anadirInstruccion("goto");
             }    
@@ -153,9 +135,6 @@ nombre : RMAIN {
 bloque : TLFLE decl_bl subprogs_anon lista_de_sentencias TRFLE
         {
             $$ = $4;
-            $$ = new sentenciastruct;
-            $$->breaks = * new vector<int>();
-            $$->continues = * new vector<int>();
         }
        ;
 
@@ -165,11 +144,11 @@ subprogs_anon : subprogs_anon subprograma_anon
 
 subprograma_anon : CTE_ID TASSIG RFUNC 
                   {
-                     codigo.añadirInstruccion("proc" + *$1);
+                     codigo.anadirInstruccion("proc " + *$1);
                   }
                   argumentos tipo_opc bloque     
                   {
-                     codigo.añadirInstruccion("endproc" + *$1);
+                     codigo.anadirInstruccion("endproc " + *$1);
                      delete $7;
                   }
       ;
@@ -192,8 +171,7 @@ declaracion : lista_de_ident tipo
 
 lista_de_ident : CTE_ID resto_lista_id
                 {
-                     $$ = new vector<string>;
-                     $$->insert($$->begin(), *$1);
+                     $2->insert($2->begin(), *$1);
                      $$ = $2; 
                 }
                ;
@@ -215,7 +193,7 @@ tipo : RINTEGER
                }
      | RFLOAT32 
                {
-                  $$ = new std::string("float32");
+                  $$ = new std::string("real");
                }
      ;
 
@@ -248,438 +226,258 @@ resto_lis_de_param : TCOMMA lista_de_ident tipo
                    | %empty
                    ;
 
-lista_de_sentencias : lista_de_sentencias sentencia
-                     {
-                        $$ = new sentenciastruct;
-                        $$ = $1;
-                        $$->breaks= *unir($1->breaks, $2->breaks);
-                        $$->continues= *unir($1->continues, $2->continues);
-                        delete $1;
-                        delete $2;
-                     }
-                    | sentencia
-                    {
-                        $$ = new sentenciastruct;
-                        $$->breaks = $1->breaks;
-                        $$->continues = $1->continues;
-                    }
-                    ;
-                    
 
-elseif_else_sentencia: RELSEIF expresion RTHEN M bloque N M elseif_else_sentencia M 
-                    {
-                        if($2->tipo != "comparacion" && $2->tipo != "bool"){
-                            yyerror("Error semántico");
-                            errores = true;
-                        }                      
-                        $$ = new sentenciastruct;
-                        codigo.completarInstrucciones($2->trues, $4);
-                        codigo.completarInstrucciones($2->falses, $7);
-                        codigo.completarInstrucciones(*$6, $9);
-                        $$->breaks = * new vector<int>;
-                        $$->continues = * new vector<int>;
-                    }
-                | RELSE  M bloque M 
-                    {
-                        $$ = new sentenciastruct;
-                        $$->breaks = * new vector<int>;
-                        $$->continues = * new vector<int>;
-                    }
-                | %empty
+
+lista_de_sentencias : lista_de_sentencias sentencia 
+                  {
+                       $$ = $1;
+                       unir($1->breaks, $2->breaks);
+                       unir($1->continues, $2->continues); 
+                       delete $2;
+                  }
+                    | sentencia { $$ = $1;}
+                    ;
 
 sentencia: variable TASSIG2 CTE_ID TOPEN lista_expr TCLOSE
               {
-                  codigo.añadirInstruccion($1->str+":= call"+$3->str);
                   $$ = new sentenciastruct;
-                  $$->breaks = * new vector<int>;
-                  $$->continues = * new vector<int>;
+                  string param = "param";
+                  codigo.anadirDeclaraciones(*$5, param);
+                  codigo.anadirInstruccion(*$1+" := "+" call "+*$3);
+                  delete $1; 
+                  delete $5;
               }
 
          | variable TASSIG2 expresion
                {
-                  codigo.añadirInstruccion($1->str+":="+$3->str);                
-                  $$= new sentenciastruct;
-                  $$->breaks = * new vector<int>;
-                  $$->continues = * new vector<int>;
-                  delete $1 ; delete $3;
+                  $$= new sentenciastruct; 
+                  codigo.anadirInstruccion(*$1+":="+$3->str); 
+                  delete $1 ; 
+                  delete $3;
                }
 
          | CTE_ID TOPEN lista_expr TCLOSE
                 {
-                  codigo.añadirInstruccion("call"+$1->str);
                   $$ = new sentenciastruct;
-                  $$->breaks = * new vector<int>;
-                  $$->continues = * new vector<int>;
+                  string param = "param";
+                  codigo.anadirDeclaraciones(*$3, param);
+                  codigo.anadirInstruccion("call "+*$1);
+                  delete $3;
                 }
 
          | RIF expresion M bloque M
             {
-                if($2->tipo != "comparacion" && $2->tipo != "bool"){
-                    yyerror("Error semántico");
-                    errores = true;
-                }
-               $$ = new sentenciastruct;
+               $$ = $4;
                codigo.completarInstrucciones($2->trues,$3);
                codigo.completarInstrucciones($2->falses,$5);
-               $$->breaks = * new vector<int>;
-               $$->continues = * new vector<int>;
+               delete $2;
             }
 
          | RFOR M expresion M bloque M
-         {
-            if($3->tipo != "comparacion" && $3->tipo != "bool"){
-                yyerror("Error semántico");
-                errores = true;
-            }             
+         {           
             $$ = new sentenciastruct;
             codigo.completarInstrucciones($3->trues, $4);
             codigo.completarInstrucciones($3->falses, $6+1);
-            codigo.completarInstrucciones($5->breaks, $6+1);
-            codigo.completarInstrucciones($5->continues, $6);
-            codigo.anadirInstruccion("goto"+$2);
-            $$->breaks = * new vector<int>();
-            $$->continues = * new vector<int>();
+            codigo.anadirInstruccion("goto "+ to_string($2));
+            codigo.completarInstrucciones($5->breaks, $6 + 1);
+            codigo.completarInstrucciones($5->continues, $2); 
+            delete $3;
+            delete $5;
          }
 
          | RFOR M bloque M
          {
             $$ = new sentenciastruct;
-            codigo.completarInstrucciones($3->breaks, codigo.obtenRef()+1);
-            codigo.completarInstrucciones($3->continues, codigo.obtenRef());
-            codigo.anadirInstruccion("goto"+$2);
-            $$->breaks = * new vector<int>();
-            $$->continues = * new vector<int>();
+            codigo.anadirInstruccion("goto "+to_string($2));    
+            codigo.completarInstrucciones($3->breaks, $4+1);
+            codigo.completarInstrucciones($3->continues, $2);
+            delete $3;
          }
-
-         | RBREAK expresion M
+         
+         | RFOR TOPEN tipo CTE_ID 
             {
-               if ($2->tipo != "comparacion" && $2->tipo != "bool"){
-                  yyerror("Error semántico en break.");
-                  errores=true;
-               }      
+               codigo.anadirInstruccion(*$3 + " "+ *$4 );
+            }
+          TASSIG expresion 
+            {
+               codigo.anadirInstruccion(*$4 +*$6 + $7->str);
+            }
+          TSEMIC M expresion TSEMIC variable TASSIG expresion TCLOSE TLFLE M lista_de_sentencias M TRFLE M
+            {
+
+                  codigo.completarInstrucciones($11->trues, $18);
+                  codigo.completarInstrucciones($11->falses, $22);
+                  codigo.anadirInstruccion("goto" +$10);
+                  codigo.completarInstrucciones($19->breaks, $22);
+                  codigo.completarInstrucciones($19->continues, $10);
+                  codigo.anadirInstruccion(*$13 +" := " +$15->str);
+                  $$ = new sentenciastruct;
+                  delete $6;
+                  delete $9;
+                  delete $13;
+            }
+         
+         | RBREAK expresion M
+            {   
                $$ = new sentenciastruct;
-               codigo.completarInstrucciones($2->falses, codigo.obtenRef());
-               $$->breaks =  $2->trues;
-               $$->continues = * new vector<int>;
+               codigo.completarInstrucciones($2->falses, $3);
+               $$->breaks = $2->trues;
+               delete $2;
             }
 
          | RCONTINUE M
             {
                 $$ = new sentenciastruct;
+                $$->continues.push_back(codigo.obtenRef()); 
                 codigo.anadirInstruccion("goto");
-                $$->breaks = * new vector<int>;
-                $$->continues.push_back(codigo.obtenRef());
             }
 
          | RREAD TOPEN variable TCLOSE
             {
                 $$ = new sentenciastruct;
-                $$->breaks = * new vector<int>;
-                $$->continues = * new vector<int>;
-                codigo.anadirInstruccion("read "+ *$3 + ";");
+                codigo.anadirInstruccion("read "+ *$3);
+                delete $3;
             }
 
          | RPRINTLN TOPEN expresion TCLOSE
             {
                 $$ = new sentenciastruct;
-                $$->breaks = * new vector<int>;
-                $$->continues = * new vector<int>;
-                codigo.anadirInstruccion("write "+ $3->str + ";");
-                codigo.anadirInstruccion("writeln;");
+                codigo.anadirInstruccion("write "+ $3->str);
+                codigo.anadirInstruccion("writeln");
+                delete $3;
             }
 
          | RRETURN expresion
          {
+            $$ = new sentenciastruct;
             codigo.anadirInstruccion("return"+$2->str);
-            $$->breaks = * new vector<int>();
-            $$->continues = * new vector<int>();
+            delete $2;
          }
-         | RIF expresion RTHEN M bloque N M elseif_else_sentencia M RENDIF
-         {
-                if($2->tipo != "comparacion" && $2->tipo != "bool"){
-                    yyerror("Error semántico");
-                    errores = true;
-                }
-               $$ = new sentenciastruct;
-	      	   codigo.completarInstrucciones($2->trues,$4);
-      	  	   codigo.completarInstrucciones($2->falses,$7);
-               codigo.completarInstrucciones(*$6, $9);            
-               $$->breaks = * new vector<int>;
-               $$->continues = * new vector<int>;
-         }
-         | RFOR TOPEN tipo CTE_ID 
-         {
-             codigo.anadirInstruccion(*$3 + " " + *$4);
-         }
-         TASSIG2 expresion 
-         {
-            if($7->tipo != "numero" && $7->tipo != "variable" && $7->tipo != "operacion"){
-                yyerror("Error semántico");
-                errores = true;
-            }        
-            codigo.anadirInstruccion(*$4 + *$6 + $7->str);
-         }
-         TSEMIC M expresion TSEMIC variable TASSIG2 expresion TCLOSE TLFLE M lista_de_sentencias N TRFLE M
-         {
-               if ($11->tipo != "comparacion" && $11->tipo != "bool"){
-                  yyerror("Error semántico en el for. La expresiṕn no puede ser una operación.");
-                  errores=true;
-               }else if (*$4 != *$13) {
-			         yyerror("Error semántico en el for. Se debe actualizar la variable de la expresión.");
-                  errores=true;
-               }
-               if ( $15->tipo!= "operacion"){
-                  yyerror("Error semántico en el for. La actualización de la variable debe ser una operación");
-                  errores=true;
-               }
-               else{
-                 codigo.completarInstrucciones($11->trues, $18);
-                 codigo.completarInstrucciones($11->falses, $22);
-                 codigo.completarInstrucciones(*$20, $10);
-            
-                 codigo.completarInstrucciones($19->breaks, $22);
-                 codigo.completarInstrucciones($19->continues, $10);
-                 
-                 $$ = new sentenciastruct;
-                 $$->breaks = * new vector<int>;
-                 $$->continues = * new vector<int>;
-               }
-             
-         }
+         
+
+         
+
          
 
          ;
 
 variable: CTE_ID
         {
-            $$->str =  $1->str;                
+            $$ =  $1;                
         }
         ;
 
 lista_expr: expresion resto_lista_expr
             {
-                $$->str = añadirDeclaraciones($2*->str,$1->str);
+               $2->insert($2->begin(), $1->str); 
+               $$ = $2;
+               delete $1;
             }
           | %empty
           {
-              $$->str = * new vector<String>;
+              $$ = new vector<string>();
           }
           ;
 
 resto_lista_expr : TCOMMA expresion resto_lista_expr
             {  
-                $$->str = añadirDeclaraciones($3*->str,$2*->str);
+               $3->insert($3->begin(), $2->str); 
+               $$ = $3; 
+               delete $2;
             }
-                  | %empty
+            | %empty
              {
-                 $$->str = * new vector<String>;
+                 $$ = new vector<string>();
              }
                  ;
 
 expresion: expresion TPLUS expresion
             {
-               if ($1->tipo== "bool" || $1->tipo=="operacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               if ($3->tipo== "bool" || $3->tipo=="operacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               $$ = nuevo_id();
-               codigo.anadirInstruccion($$->str+":="+$1->str+"+"+$3->str);
+
                $$= new expresionstruct;
-               $$->trues = * new vector<int>();
-               $$->falses = * new vector<int>();
                *$$ = makearithmetic($1->str,*$2,$3->str);
                delete $1;
                delete $3;
-               $$->tipo = "operacion";
             }
 
          | expresion TMINUS expresion
             {
-                if ($1->tipo== "bool" || $1->tipo=="operacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               if ($3->tipo== "bool" || $3->tipo=="operacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               $$ = nuevo_id();
-               codigo.anadirInstruccion($$->str+":="+$1->str+"-"+$3->str);
                $$= new expresionstruct;
-               $$->trues = * new vector<int>();
-               $$->falses = * new vector<int>();
                *$$ = makearithmetic($1->str,*$2,$3->str);
-               $$->tipo = "operacion";
+               delete $1;
+               delete $3;
             }
 
          | expresion TMUL expresion
             {
-                if ($1->tipo== "bool" || $1->tipo=="operacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               if ($3->tipo== "bool" || $3->tipo=="operacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               $$ = nuevo_id();
-               codigo.anadirInstruccion($$->str+":="+$1->str+"*"+$3->str);
+
                $$= new expresionstruct;
-               $$->trues = * new vector<int>();
-               $$->falses = * new vector<int>();
                *$$ = makearithmetic($1->str,*$2,$3->str);
-               $$->tipo = "operacion";
+               delete $1;
+               delete $3;
             }
 
 
          | expresion TDIV expresion
             {  
-                if ($1->tipo== "bool" || $1->tipo=="operacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               if ($3->tipo== "bool" || $3->tipo=="operacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               $$ = nuevo_id();
-               codigo.anadirInstruccion($$->str+":="+$1->str+"/"+$3->str);
-               codigo.anadirInstruccion("if"+$3->str+"=0 goto 2");
                $$= new expresionstruct;
-               $$->trues = * new vector<int>();
-               $$->falses = * new vector<int>();
                *$$ = makearithmetic($1->str,*$2,$3->str);
-               $$->tipo = "operacion";
+               delete $1;
+               delete $3;
             }
 
 
          | expresion TCLT expresion
             {
-                 if ($1->tipo== "bool" || $1->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               if ($3->tipo== "bool" || $3->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               
                $$= new expresionstruct;               
-               $$->str= "";
-               $$->trues = * new vector<int>(codigo.obtenRef());
-               $$->falses = * new vector<int>(codigo.obtenRef()+1);
-               codigo.anadirInstruccion("if"+$1->str+"<"+$3->str);
-               codigo.anadirInstruccion("goto");
                *$$ = makecomparison($1->str,*$2,$3->str);
-               $$->tipo = "comparacion";
+               delete $1;
+               delete $3;
             }
 
 
          | expresion TCGT expresion
             {
-                 if ($1->tipo== "bool" || $1->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               if ($3->tipo== "bool" || $3->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
                $$= new expresionstruct;
-               $$->str= "";
-               $$->trues = * new vector<int>(codigo.obtenRef());
-               $$->falses = * new vector<int>(codigo.obtenRef()+1);
-               codigo.anadirInstruccion("if"+$1->str+">"+$3->str);
-               codigo.anadirInstruccion("goto");
                *$$ = makecomparison($1->str,*$2,$3->str);
-               $$->tipo = "comparacion";
+               delete $1;
+               delete $3;
             }
 
 
          | expresion TCLE expresion
             {
-                 if ($1->tipo== "bool" || $1->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               if ($3->tipo== "bool" || $3->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
                $$= new expresionstruct;
-               $$->str= "";
-               $$->trues = * new vector<int>(codigo.obtenRef());
-               $$->falses = * new vector<int>(codigo.obtenRef()+1);
-               codigo.anadirInstruccion("if"+$1->str+"<="+$3->str);
-               codigo.anadirInstruccion("goto");
                *$$ = makecomparison($1->str,*$2,$3->str);
-               $$->tipo = "comparacion";
+               delete $1;
+               delete $3;
             }
 
 
          | expresion TCGE expresion
             {
-                 if ($1->tipo== "bool" || $1->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               if ($3->tipo== "bool" || $3->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
             $$= new expresionstruct;
-            $$->str= "";
-            $$->trues = * new vector<int>(codigo.obtenRef());
-            $$->falses = * new vector<int>(codigo.obtenRef()+1);
-            codigo.anadirInstruccion("if"+$1->str+">="+$3->str);
-            codigo.anadirInstruccion("goto");
             *$$ = makecomparison($1->str,*$2,$3->str);
-            $$->tipo = "comparacion";
+            delete $1;
+            delete $3;
          }
 
          | expresion TCEQ expresion
             {
-                 if ($1->tipo== "bool" || $1->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               if ($3->tipo== "bool" || $3->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
                $$= new expresionstruct;
-               $$->str= "";
-               $$->trues = * new vector<int>(codigo.obtenRef());
-               $$->falses = * new vector<int>(codigo.obtenRef()+1);
-               codigo.añadirInstruccion("if"+$1->str+"=="+$2->str);
-               codigo.añadirInstruccion("goto");
-               *$$ = makecomparison($1->str,*$2,$3->str);
-               $$->tipo = "comparacion";
+               string eq = "=";
+               *$$ = makecomparison($1->str,eq,$3->str);
+               delete $1;
+               delete $3;
             }
 
 
          | expresion TNEQ expresion
             {
-                 if ($1->tipo== "bool" || $1->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
-               if ($3->tipo== "bool" || $3->tipo=="comparacion"){
-                  yyerror("Tipos incompatibles");
-                  errores=true;
-               }
                $$= new expresionstruct;
-               $$->str= "";
-               $$->trues = * new vector<int>(codigo.obtenRef());
-               $$->falses = * new vector<int>(codigo.obtenRef()+1);
-               codigo.añadirInstruccion("if"+$1->str+"!="+$2->str);
-               codigo.añadirInstruccion("goto");
                *$$ = makecomparison($1->str,*$2,$3->str);
-               $$->tipo = "comparacion";
+               delete $1;
+               delete $3;
                
             }
 
@@ -687,63 +485,55 @@ expresion: expresion TPLUS expresion
          | variable
         {
                 $$ = new expresionstruct;
-                $$->trues = * new vector<int>();
-                $$->falses = * new vector<int>();
                 $$->str = *$1;
-                $$->tipo = "variable";
         }
          | CTE_INT
         {
                 $$ = new expresionstruct;
-                $$->trues = * new vector<int>();
-                $$->falses = * new vector<int>();
-                $$->str = *$1->str;
-                $$->tipo = "numero";
+                $$->str = *$1;
         }
          | CTE_FLOAT32
         {
                 $$ = new expresionstruct;
-                $$->trues = * new vector<int>();
-                $$->falses = * new vector<int>();
-                $$->str = *$1->str;
-                $$->tipo = "numero";                
+                $$->str = *$1;               
         }
          | TOPEN expresion TCLOSE
         {
                 $$ = new expresionstruct;
                 $$->trues = $2->trues;
                 $$->falses = $2->falses;
-                $$->str = $2->str;
-                $$->tipo = $2->tipo;               
+                $$ = $2;              
         }
-        
-         | expresion RAND M expresion 
-        {
-               $$= new expresionstruct;
-               codigo.completarInstrucciones($1->trues, $3);
-               $$->trues = $4->trues;
-               $$->falses = *unir($1->falses, $4->falses);
-               $$->str = "";
-               $$->tipo = "bool";               
-        }
-        
+           
+           
+         | expresion RAND M expresion
+         {
+             $$ = new expresionstruct;
+             codigo.completarInstrucciones($1->trues, $3);
+             $$->trues = $4->trues;
+             $$->falses = unir($1->falses, $4->falses);
+             delete $1;
+             delete $4;
+         }
+         
          | expresion ROR M expresion
         {
                $$= new expresionstruct;
                codigo.completarInstrucciones($1->falses, $3);
-               $$->trues = *unir($1->trues, $4->trues);
+               $$->trues = unir($1->trues, $4->trues);
                $$->falses = $4->falses;
-               $$->str = "";
-               $$->tipo = "bool";
+               delete $1;
+               delete $4;
         }
         
          | RNOT expresion
         {
               $$= new expresionstruct;
               $$->trues = $2->falses;
-              $$->str = "";
-              $$->tipo = "bool";
-        }       
+              $$->falses = $2->trues;
+              delete $2;
+        }    
+      
     ;
 
 M: %empty
@@ -751,17 +541,14 @@ M: %empty
 ;
 
 
-N: %empty
-        {$$ = new vector<int>();
-        codigo.anadirInstruccion("goto");
-        };
+
 %%
 
 expresionstruct makecomparison(std::string &s1, std::string &s2, std::string &s3) {
   expresionstruct tmp ; 
   tmp.trues.push_back(codigo.obtenRef()) ;
   tmp.falses.push_back(codigo.obtenRef()+1) ;
-  codigo.anadirInstruccion("if " + s1 + s2 + s3 + " goto") ;
+  codigo.anadirInstruccion("if " + s1 + " " + s2 + " " + s3 + " goto") ;
   codigo.anadirInstruccion("goto") ;
   return tmp ;
 }
@@ -770,13 +557,11 @@ expresionstruct makecomparison(std::string &s1, std::string &s2, std::string &s3
 expresionstruct makearithmetic(std::string &s1, std::string &s2, std::string &s3) {
   expresionstruct tmp ; 
   tmp.str = codigo.nuevoId() ;
-  codigo.anadirInstruccion(tmp.str + ":=" + s1 + s2 + s3) ;     
+  codigo.anadirInstruccion(tmp.str + ":=" + s1 + " " + s2 + " " + s3) ;     
   return tmp ;
 }
 
-vector<int>* unir(vector<int> &lis1, vector<int> &lis2){
-        vector<int>* res= new vector<int>;
-        res->insert(res->begin(), lis1.begin(), lis1.end());
-        res->insert(res->begin(), lis2.begin(), lis2.end());
-        return res;
+vector<int>& unir(vector<int>& lis1, vector<int>& lis2) {
+    lis1.insert(lis1.end(), lis2.begin(), lis2.end());
+    return lis1;
 }
